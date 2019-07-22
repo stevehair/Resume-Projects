@@ -1,0 +1,78 @@
+from googlesearch import search
+import pandas as pd
+import requests
+import re
+from bs4 import BeautifulSoup
+
+file = pd.read_excel(r'C:\Users\steven.hair\Dropbox (Academy Mortgage)\Academy Labs\Steve BOTs\NMLS Data Mining.xlsx')
+
+df = pd.DataFrame(file, dtype='str')
+
+USER_AGENT = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                           'Chrome/61.0.3163.100 Safari/537.36'}
+lo_name = None
+co_name = None
+terms_array = ['cust', 'Cust', 'info', 'Info', 'serv', 'Serv', 'proc', '.jpg', '.png', 'news', 'webmaster', 'feedback',
+               'attorney', 'Attorney', 'correct', 'support', 'Supp', 'contact', 'Contact', '.webp', 'legal', 'Legal',
+               'relations', 'Compliance','compliance','.org', '?', 'inquiry', 'admin', 'complaint', '.edu', 'test',
+               'Test']
+
+for index, row in df.iterrows():
+    lo_name = str(row[0])
+    co_name = str(row[1])
+    phone = []
+    email = []
+
+    try:
+        for url in search(lo_name + ' ' + co_name, stop=3):
+            content = requests.get(url, headers=USER_AGENT)
+            content.raise_for_status()
+            html = content.text
+            soup = BeautifulSoup(html, 'html.parser')
+            mailto = soup.select('a[href^=mailto]')
+
+            for i in mailto:
+                href = i['href']
+                try:
+                    str1, str2 = href.split(':')
+                except ValueError:
+                    break
+                for t in terms_array:
+                    if any(t in str2 for t in terms_array):
+                        break
+                    else:
+                        email.append(str2)
+            tags = soup('body')
+            for tag in tags:
+                y = str(tag)
+
+                phone_find = re.findall(r"((?:\d{3}|\(\d{3}\))?(?:\s|-|\.)?\d{3}(?:\s|-|\.)\d{4})", y)
+                for i in phone_find:
+                    h = re.findall(r'\d+', i)
+                    k = ''
+                    for j in h:
+                        k += j
+                        if len(k) == 10:
+                            phone.append(int(k))
+
+                email_find = re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}", y)
+                for i in email_find:
+                    for t in terms_array:
+                        if any(t in i for t in terms_array):
+                            break
+                        else:
+                            email.append(i)
+
+
+                phone = list(set(phone))
+                phone = list(filter(None, phone))
+                email = list(set(email))
+                email = list(filter(None, email))
+
+    except Exception:
+        continue
+
+    df.at[index, 'Phone'] = phone
+    df.at[index,'Email'] = email
+
+df.to_excel(r'C:\Users\steven.hair\Dropbox (Academy Mortgage)\Academy Labs\Steve BOTs\final_report3.xlsx')
