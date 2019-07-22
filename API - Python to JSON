@@ -1,0 +1,45 @@
+import requests
+import simplejson as json
+import pandas as pd
+
+file = pd.read_excel(r'example.xlsx')
+
+df = pd.DataFrame(file, dtype='str')
+
+url = 'www.example.com'
+
+apiuser = 'XXXXXX'
+apikey = 'XXXXXXX'
+
+headers = {'Content-Type':'application/json'}
+
+for index, row in df.iterrows():
+    phone_array = [str(row[3]), str(row[4]), str(row[5]), str(row[6])]
+    notes_array = [row[12],row[13], row[14], row[15], row[16]]
+    try:
+        phone_array.remove('nan')
+    except ValueError:
+        None
+    finally:
+        phone = ','.join(phone_array)
+
+    notes = '\n'.join(notes_array)
+
+    data = {'api_user' : apiuser,
+            'api_secret' : apikey,
+            'first_name' : str(row[0]),
+            'last_name' : str(row[1]),
+            'email' : str(row[2]),
+            'phone' : phone,
+            'notes' : 'Old Loan Number: ' + str(row[7]) + '\n' + notes,
+            'tags' : ['ExLO Refi - 1st VM'],
+            'source' : 'Batch 1 - July 16',
+            'agent_identifier' : 'steve.lines@academymortgage.com',
+            'address' : str(row[8]),
+            'city' : str(row[9]),
+            'state' : str(row[10]),
+            'zip' : str(row[11])
+            }
+
+    response = requests.post(url=url, data=json.dumps(data), headers=headers)
+    print(response.json())
