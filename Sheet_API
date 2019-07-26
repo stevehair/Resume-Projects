@@ -1,0 +1,129 @@
+import pickle
+import os.path
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from datetime import datetime
+from mortgage import Loan
+
+current_run = datetime.strptime('07/01/2019 10:01:01', '%m/%d/%Y %I:%M:%S')
+
+while True:
+    def api_access():
+        scopes = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+
+        spreadsheet_id = '1M53Z6oqh0OMiLRR21sWru2gIhUlAGL2LUHjw8b2MFFA'
+        range_name = 'NamedRange1'
+
+        creds = None
+
+        if os.path.exists('token.pickle'):
+            with open('token.pickle', 'rb') as token:
+                creds = pickle.load(token)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json', scopes)
+                creds = flow.run_local_server(port=0)
+            with open('token.pickle', 'wb') as token:
+                    pickle.dump(creds, token)
+
+        service = build('sheets', 'v4', credentials=creds)
+        sheet = service.spreadsheets()
+        result = sheet.values().get(spreadsheetId=spreadsheet_id,
+                                range=range_name).execute()
+        return result
+
+    result = api_access()
+    position = len(result['values']) -1
+    last_run = str(result['values'][position][0]).split(' ')
+
+    if len(last_run[0]) < 11:
+        last_run[0] = '0' + last_run[0]
+    if len(last_run[1]) < 8:
+        last_run[1] = '0' + last_run[1]
+
+    last_run = last_run[0] + ' ' + last_run[1]
+    last_run = datetime.strptime(last_run, '%m/%d/%Y %I:%M:%S')
+
+    if last_run > current_run:
+        current_run = last_run
+
+        input_data = result['values'][position]
+        LO = input_data[1]
+        bwr = input_data[2]
+        program = input_data[3]
+        loan_purpose = input_data[4]
+        home_value = int(input_data[5])
+        down_payment = input_data[6]
+        rates = input_data[7]
+        mi = input_data[0]
+
+        try:
+            program = program.split(',')
+        except Exception:
+            None
+        try:
+            down_payment = down_payment.split(',')
+        except Exception:
+            None
+        try:
+            rates = rates.split(',')
+        except Exception:
+            None
+        try:
+            mi = mi.split(',')
+        except Exception:
+            None
+
+
+        for i in down_payment:
+            j = down_payment.index(i)
+            down_payment[j] = i.strip('%')
+            down_payment[j] = down_payment[j].strip(' ')
+        for i in rates:
+            j = rates.index(i)
+            rates[j] = i.strip(' ')
+        for i in program:
+            j = program.index(i)
+            program[j] = i.strip(' ')
+
+        def payment_calculator(loan, interest, term):
+            payment = loan*(interest*(1+interest)**term) / ((1+interest)**term-1)
+            return int(payment)
+
+        num_scenarios = len(program) * len(down_payment) + len(mi)
+        scenario = 1
+        loan_scenarios = {}
+
+        for x in range(1,num_scenarios + 1):
+            loan_scenarios["scenario{0}".format(x)] = {'down_payment' : '',
+                                                       'mi' : '',
+                                                       'rate1' : rates[0],
+                                                       'rate2' : rates[1],
+                                                       'rate3' : rates[2],
+                                                       'program' : '',
+                                                       'payment1' : '',
+                                                       'payment2' : '',
+                                                       'payment3' : ''
+                                                       }
+        try:
+            for i in program:
+                for k in down_payment:
+                    loan1 = Loan(principal=home_value*(1-float(k)/100), interest=float(loan_scenarios["scenario{0}".format(scenario)]['rate1'])/100, term=30)
+                    loan2 = Loan(principal=home_value*(1-float(k)/100), interest=float(loan_scenarios["scenario{0}".format(scenario)]['rate2'])/100, term=30)
+                    loan3 = Loan(principal=home_value*(1-float(k)/100), interest=float(loan_scenarios["scenario{0}".format(scenario)]['rate3'])/100, term=30)
+
+                    loan_scenarios["scenario{0}".format(scenario)]['down_payment'] = k
+                    loan_scenarios["scenario{0}".format(scenario)]['program'] = i
+                    loan_scenarios["scenario{0}".format(scenario)]['payment1'] = loan1.monthly_payment
+                    loan_scenarios["scenario{0}".format(scenario)]['payment2'] = loan2.monthly_payment
+                    loan_scenarios["scenario{0}".format(scenario)]['payment3'] = loan3.monthly_payment
+                scenario +=1
+        except KeyError:
+            None
+
+
+        print(loan_scenarios)
